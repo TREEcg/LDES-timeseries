@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "@treecg/ldes-snapshot": "^0.1.0",
+    "@treecg/sds-storage-writer-mongo": "^0.0.3",
+    "mongodb": "^5.0.0",
+    "ts-node": "^10.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^18.11.19"
+  }
+}
