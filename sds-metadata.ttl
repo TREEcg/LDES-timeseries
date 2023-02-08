@@ -1,0 +1,16 @@
+@prefix dcat: <http://www.w3.org/ns/dcat#>.
+@prefix dct: <http://purl.org/dc/terms/>.
+@prefix ldes: <http://w3id.org/ldes#>.
+@prefix sds: <https://w3id.org/sds#>.
+@prefix sosa: <http://www.w3.org/ns/sosa/>.
+
+<http://example.org/sds> a sds:Stream; 
+    sds:carries sds:Member;
+    sds:dataset <http://example.org/sds#dataset>.
+
+<http://example.org/sds#dataset> a dcat:Dataset;
+    dct:title "Location data of a run of Wout" ;
+    dct:publisher <https://woslabbi.solidcommunity.net/profile/card#me>;
+    ldes:timestampPath sosa:resultTime;
+    dct:identifier <http://example.org/location> .
+
