@@ -54,6 +54,7 @@ Now that there are members and fragmentations stored in the database, they can b
 
 For this you have to run the server with [this ldes-config](./ldes-storeConfig/config-ldes.json).
 
+At this point, you can see the LDES at [http://localhost:3000/ldes/example](http://localhost:3000/ldes/example)
 
 ## Progress
 
