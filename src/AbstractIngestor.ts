@@ -1,4 +1,4 @@
-import { SDS, Member, RelationType } from '@treecg/types'
+import { Member, RelationType } from '@treecg/types'
 
 export interface IRelation {
     type: RelationType
@@ -95,8 +95,27 @@ export interface Window {
     memberIdentifiers?: string[]
 }
 
+export interface LDESTSConfig {
+    /**
+     * Identifier of the SDS stream.
+     */
+    sdsStreamIdentifier: string
+    /**
+     * SHACL property path used to indicate on which member property the relation applies.
+     */
+    timestampPath: string,
+    /**
+     * Number of members per window (same as fragmentationSize and bucketSize).
+     */
+    pageSize?: number,
+    /**
+     * Date of the value of the first relation that will be created.
+     */
+    date?: Date
+}
+
 export interface TSIngestor {
-    instantiate(config: string): Promise<void>;
+    instantiate(config: LDESTSConfig): Promise<void>;
     /**
      * Creates a window.
      * @param window 

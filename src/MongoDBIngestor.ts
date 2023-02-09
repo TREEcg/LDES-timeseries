@@ -1,11 +1,12 @@
-import { extractDate } from "@treecg/ldes-snapshot";
+import { DCAT, LDES, extractDate, Logger, storeToString, turtleStringToStore } from "@treecg/ldes-snapshot";
 import { MongoFragment } from "@treecg/sds-storage-writer-mongo/lib/fragmentHelper";
-import { Member, RelationType, SDS } from '@treecg/types';
+import { Member, RDF, RelationType, SDS } from '@treecg/types';
 import { Collection, Db, Document, WithId, MongoClient } from "mongodb";
-import { Store } from 'n3';
-import { AbstractIngestor, IngestorConfig, IRelation, TSIngestor } from './AbstractIngestor';
+import { Store, DataFactory } from 'n3';
+import { AbstractIngestor, IngestorConfig, IRelation, LDESTSConfig, TSIngestor } from './AbstractIngestor';
 import { quadsToString } from './Util';
 import { Window } from "./AbstractIngestor";
+const { namedNode, quad, blankNode, literal } = DataFactory;
 
 export interface MongoDBIngestorConfig extends IngestorConfig {
     /**
@@ -75,18 +76,32 @@ export class MongoDBIngestor extends AbstractIngestor {
         }
         return this._db!;
     }
+
+    protected async streamExists(): Promise<boolean> {
+        const streamExists = await this.dbMetaCollection.findOne({ id: this.sdsStreamIdentifier });
+        if (streamExists) return true
+        return false
+    }
+
+    protected async getSDSMetadata(): Promise<string> {
+        const metadata = await this.dbMetaCollection.findOne({ id: this.sdsStreamIdentifier });
+        if (!metadata) throw Error("does not exist yet")
+        return metadata.value;
+    }
+
+    protected async startConnection(): Promise<void> {
+        this.mongoConnection = await new MongoClient(this.mongoDBURL).connect();
+        this._db = this.mongoConnection.db();
+    }
     /**
      * Stores the metadata of the SDS stream into the Mongo Database in the meta collection.
      *
      * @param sdsMetadata - The SDS metadata for the SDS Stream.
      */
     public async initialise(sdsMetadata?: string): Promise<void> {
-        this.mongoConnection = await new MongoClient(this.mongoDBURL).connect();
-        this._db = this.mongoConnection.db();
+        if (!this.mongoConnection) await this.startConnection();
 
-        const streamExists = await this.dbMetaCollection.findOne({ id: this.sdsStreamIdentifier });
-
-        if (streamExists) return // log that a stream already exists so must not be initialised
+        if (await this.streamExists()) return // log that a stream already exists so must not be initialised
 
         if (!sdsMetadata) throw Error("No way to create SDS metadata, can be done later maybe.")
 
@@ -154,8 +169,9 @@ export class MongoDBIngestor extends AbstractIngestor {
 export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
     protected _pageSize?: number;
     protected _timestampPath?: string;
-    protected _metadata?: any; // TODO: ldes and sds metadata?
+    protected _metadata?: any; 
     protected root = "";
+    protected logger = new Logger(this);
 
 
     private get pageSize(): number {
@@ -167,22 +183,52 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
         return this._timestampPath;
     }
 
+    private makeSDSConfig(config: LDESTSConfig): string {
+        const {sdsStreamIdentifier, timestampPath, pageSize} = config ;
+        const dataSetNode = namedNode("http://example.org/sds#dataset")
+        const sdsMetadataStore = new Store();
+        sdsMetadataStore.addQuad(namedNode(sdsStreamIdentifier), RDF.terms.type, SDS.terms.Stream);
+        sdsMetadataStore.addQuad(namedNode(sdsStreamIdentifier), SDS.terms.carries, SDS.terms.Member);
+        sdsMetadataStore.addQuad(namedNode(sdsStreamIdentifier), SDS.terms.dataset, dataSetNode);
+
+        sdsMetadataStore.addQuad(dataSetNode, RDF.terms.type, LDES.terms.EventStream);
+        sdsMetadataStore.addQuad(dataSetNode, LDES.terms.timestampPath, namedNode(timestampPath));
+        if (pageSize) {
+            sdsMetadataStore.addQuad(dataSetNode, LDES.terms.pageSize, literal(pageSize));
+        }
+        return storeToString(sdsMetadataStore);
+    }
+
     // initializes a LDES-TS if it does not exist yet.
     // Otherwise, just starts up the database
-    async instantiate(config: string): Promise<void> {
-        await this.initialise(config)
-
-        // extract metadata from config | TODO: if config does not exist, extract from db
-        this._pageSize = 50;
-        this._timestampPath = "http://www.w3.org/ns/sosa/resultTime";
-        this._metadata = config;
-        const date = new Date("2022-08-07T08:08:21Z"); // TODO: replace with real value
-
-        if (await this.bucketExists(this.root)) {
+    async instantiate(config: LDESTSConfig): Promise<void> {
+        await this.startConnection();
+        if (await this.streamExists()){
+            const metadata = await this.getSDSMetadata();
+            const metadataStore = await turtleStringToStore(metadata);
+            
+            const ldesNode = metadataStore.getQuads(this.sdsStreamIdentifier, SDS.terms.dataset, null, null)[0].object
+            this._timestampPath = metadataStore.getQuads(ldesNode, LDES.timestampPath,null,null)[0].object.value
+            const pageSizeExists = metadataStore.getQuads(ldesNode, LDES.pageSize,null,null)[0]
+            if (pageSizeExists) {
+                this._pageSize = Number(pageSizeExists.object.value)
+            } else {
+                this._pageSize = Infinity
+            }
+            this.logger.info(`SDS exists already. timestampPath ${this.timestampPath} | pageSize ${this.pageSize}.`)
             return
         }
+        const {pageSize, timestampPath} = config ;
+        const sdsMetadata = this.makeSDSConfig(config)
+        await this.initialise(sdsMetadata)
 
-        // only if the root does not exist yet
+        // extract metadata from config
+        this._pageSize = pageSize ?? Infinity;
+        this._timestampPath = timestampPath
+        this._metadata = sdsMetadata;
+        const date = config.date ?? new Date();
+
+        // create root
         await this.createBucket(this.root)
 
         // create first window
@@ -192,6 +238,8 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
         }
         await this.createWindow(firstWindow);
         await this.addWindowToRoot(firstWindow);
+
+        this.logger.info(`Initialialise SDS. Time Series oldest relation: ${date.toISOString()} | timestampPath ${this.timestampPath} | pageSize ${this.pageSize}.`)
     }
 
 
