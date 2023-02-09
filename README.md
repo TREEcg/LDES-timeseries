@@ -1,12 +1,56 @@
-# LDES TS ingester
+# LDES Timeseries
 
-Add members to an LDES according to the LDES timestamp fragmentation explained in LDES in LDP
+Add members to an LDES Time Series in different kinds of databases.
 
-Configuration is the following: ... (as little as possible)
+Databases implemented so far
 
-## Config
+- [x] MongoDB
+- [ ] MongoDB Timeseries (see [RINF-LDES](https://github.com/SEMICeu/RINF-LDES))
+- [ ] [InfluxDB](https://www.influxdata.com/)
+- [ ] [TimeScaleDB](https://www.timescale.com/): Postgres for time-series
+- [ ] Apacha Kafka ?
 
-* pageSize
+## Ingesting members into a database
+
+### MongoDB
+
+The following piece of code ingests the some members in a MongoDB.
+
+If you don't have MongoDB installed, checkout these [instructions](./documentation/MongoDB.md) for installations.
+
+```javascript
+import { extractMembers } from "@treecg/ldes-snapshot";
+import { storeFromFile, TSMongoDBIngestor } from "./";
+
+async function main() {
+    // load some members
+    const fileName = "./location-LDES.ttl"
+    const ldesIdentifier = "http://localhost:3000/lil/#EventStream"
+    const store = await storeFromFile(fileName);
+    const members = extractMembers(store, ldesIdentifier);
+
+
+    const sdsIdentifier = "http://example.org/sds"
+    const ldesTSConfig = {
+        sdsStreamIdentifier: sdsIdentifier,
+        timestampPath: "http://www.w3.org/ns/sosa/resultTime",
+        pageSize: 50,
+        date: new Date("2022-08-07T08:08:21Z")
+    }
+    const ingestor = new TSMongoDBIngestor({ sdsStreamIdentifier: sdsIdentifier });
+
+
+    await ingestor.instantiate(ldesTSConfig);
+    await ingestor.publish(members)
+
+    await ingestor.exit();
+}
+main()
+```
+
+Now that there are members and fragmentations stored in the database, they can be hosted using the [LDES Solid Server](https://github.com/TREEcg/ldes-solid-server).
+
+For this you have to run the server with [this ldes-config](./ldes-storeConfig/config-ldes.json).
 
 
 ## Progress
@@ -18,4 +62,9 @@ Configuration is the following: ... (as little as possible)
 ## Next steps
 
 * create a total new LDES in mongoDB using `@treecg/sds-storage-writer-mongo`
-* Document how to create an LDES-TS using this and the Solid-LDES-Store
+
+## Feedback and questions
+
+Do not hesitate to [report a bug](https://github.com/woutslabbinck/LDES-timeseries/issues).
+
+Further questions can also be asked to [Wout Slabbinck](mailto:wout.slabbinck@ugent.be) (developer and maintainer of this repository).
