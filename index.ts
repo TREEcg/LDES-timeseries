@@ -3,7 +3,7 @@ import { storeFromFile, TSMongoDBIngestor } from "./";
 
 async function main() {
     // load some members
-    const fileName = "./location-LDES.ttl"
+    const fileName = "./data/location-LDES.ttl"
     const ldesIdentifier = "http://localhost:3000/lil/#EventStream"
     const store = await storeFromFile(fileName);
     const members = extractMembers(store, ldesIdentifier);
