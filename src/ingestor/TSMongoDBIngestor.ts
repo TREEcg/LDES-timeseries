@@ -93,10 +93,8 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
     }
 
     async bucketSize(window: Window): Promise<number> {
-        const bucket = await this.dbIndexCollection.findOne({ id: window.identifier, streamId: this.sdsStreamIdentifier });
-        if (!bucket) {
-            throw Error("Window with identifier " + window.identifier + " was not found in the database");
-        }
+        const bucket = await this.getBucket(window.identifier);
+        if (!bucket.members) return 0; // though members should always exist
         return bucket.members.length;
     }
 
@@ -164,7 +162,12 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
                 path: this.timestampPath,
                 bucket: currentWindow.identifier
             }]);
+
+            // add member
+            await this.storeMember(member);
+            await this.addMemberstoBucket(newWindow.identifier, [member.id.value]);
         } else {
+            // add member
             await this.storeMember(member);
             await this.addMemberstoBucket(currentWindow.identifier, [member.id.value]);
         }

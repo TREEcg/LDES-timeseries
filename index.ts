@@ -20,7 +20,7 @@ async function main() {
 
 
     await ingestor.instantiate(ldesTSConfig);
-    // await ingestor.publish(members)
+    await ingestor.publish(members)
 
     await ingestor.exit();
 }

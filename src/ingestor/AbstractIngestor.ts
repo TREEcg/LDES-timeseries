@@ -34,7 +34,6 @@ export abstract class AbstractIngestor {
      * Persists members in the database.
      * 
      * @param member 
-     * @param timestamp 
      */
     public abstract storeMembers(member: Member[]): Promise<void>;
 

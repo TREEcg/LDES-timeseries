@@ -52,11 +52,11 @@ export class MongoDBIngestor extends AbstractIngestor {
         return this.db.collection(this.dataCollectionName);
     }
 
-    protected get dbIndexCollection(): Collection<Document> {
+    protected get dbIndexCollection(): Collection<MongoFragment> {
         if (!this.mongoConnection) {
             throw Error(`Not connected to ${this.mongoDBURL} while trying to use to the index Collection. Try \`initialise\` first.`);
         }
-        return this.db.collection(this.indexCollectionName);
+        return this.db.collection<MongoFragment>(this.indexCollectionName);
     }
 
     protected get dbMetaCollection(): Collection<Document> {
@@ -89,6 +89,7 @@ export class MongoDBIngestor extends AbstractIngestor {
         this.mongoConnection = await new MongoClient(this.mongoDBURL).connect();
         this._db = this.mongoConnection.db();
     }
+
     /**
      * Stores the metadata of the SDS stream into the Mongo Database in the meta collection.
      *
@@ -159,6 +160,12 @@ export class MongoDBIngestor extends AbstractIngestor {
             return true
         }
         return false
+    }
+
+    protected async getBucket(bucketIdentifier: string): Promise<MongoFragment> {
+        const bucket = await this.dbIndexCollection.findOne({ streamId: this.sdsStreamIdentifier, id: bucketIdentifier });
+        if (!bucket) throw Error("bucket does not exist")
+        return bucket;
     }
 }
 

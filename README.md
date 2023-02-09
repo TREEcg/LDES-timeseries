@@ -9,14 +9,16 @@ Databases implemented so far
 - [ ] [InfluxDB](https://www.influxdata.com/)
 - [ ] [TimeScaleDB](https://www.timescale.com/): Postgres for time-series
 - [ ] Apacha Kafka ?
+- [ ] Plain file ?
 
 ## Ingesting members into a database
 
 ### MongoDB
 
-The following piece of code ingests the some members in a MongoDB.
+Note: If you don't have MongoDB installed, checkout these [instructions](./documentation/MongoDB.md) for installations.
 
-If you don't have MongoDB installed, checkout these [instructions](./documentation/MongoDB.md) for installations.
+The following piece of code ingests the some members in a MongoDB. An alternative is to execute `tsc && npx ts-node index.ts` where you cloned this directory.
+
 
 ```javascript
 import { extractMembers } from "@treecg/ldes-snapshot";
@@ -62,6 +64,7 @@ For this you have to run the server with [this ldes-config](./ldes-storeConfig/c
 ## Next steps
 
 * create a total new LDES in mongoDB using `@treecg/sds-storage-writer-mongo`
+* maybe add timestamp directly from the member as we are always working with ldes ts? -> where should it be implemented
 
 ## Feedback and questions
 
