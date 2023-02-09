@@ -1,4 +1,6 @@
 {
+  "main": "dist/Index.js",
+  "types": "dist/Index.d.ts",
   "dependencies": {
     "@treecg/ldes-snapshot": "^0.1.0",
     "@treecg/sds-storage-writer-mongo": "^0.0.3",
@@ -7,5 +9,8 @@
   },
   "devDependencies": {
     "@types/node": "^18.11.19"
+  },
+  "scripts": {
+    "build": "tsc"
   }
 }

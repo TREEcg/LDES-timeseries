@@ -15,7 +15,7 @@ export async function storeFromFile(filepath: string): Promise<Store> {
     return await turtleStringToStore(readFileSync(filepath, "utf-8"));
 }
 
-export async function quadsToString(quads: Quad[]):Promise<string> {
+export function quadsToString(quads: Quad[]):string {
     return storeToString(new Store(quads))
 }
 

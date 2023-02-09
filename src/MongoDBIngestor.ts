@@ -1,9 +1,11 @@
+import { extractDate } from "@treecg/ldes-snapshot";
 import { MongoFragment } from "@treecg/sds-storage-writer-mongo/lib/fragmentHelper";
-import { Member, SDS, RelationType } from '@treecg/types';
-import { Collection, Db, Document } from "mongodb";
+import { Member, RelationType, SDS } from '@treecg/types';
+import { Collection, Db, Document, WithId, MongoClient } from "mongodb";
+import { Store } from 'n3';
 import { AbstractIngestor, IngestorConfig, IRelation, TSIngestor } from './AbstractIngestor';
-import { quadsToString } from './util';
-const { MongoClient } = require("mongodb")
+import { quadsToString } from './Util';
+import { Window } from "./AbstractIngestor";
 
 export interface MongoDBIngestorConfig extends IngestorConfig {
     /**
@@ -22,7 +24,7 @@ export interface MongoDBIngestorConfig extends IngestorConfig {
     indexCollectionName?: string;
 
 
-    /** 
+    /**
      * The URL of the MongoDB database.
      */
     mongoDBURL?: string;
@@ -35,7 +37,7 @@ export class MongoDBIngestor extends AbstractIngestor {
     private indexCollectionName: string;
     private mongoDBURL: string;
 
-    private mongoConnection: typeof MongoClient | undefined;
+    private mongoConnection: MongoClient | undefined;
     private _db: Db | undefined;
 
     public constructor(config: MongoDBIngestorConfig) {
@@ -75,7 +77,7 @@ export class MongoDBIngestor extends AbstractIngestor {
     }
     /**
      * Stores the metadata of the SDS stream into the Mongo Database in the meta collection.
-     * 
+     *
      * @param sdsMetadata - The SDS metadata for the SDS Stream.
      */
     public async initialise(sdsMetadata?: string): Promise<void> {
@@ -92,14 +94,14 @@ export class MongoDBIngestor extends AbstractIngestor {
     }
 
     public async exit(): Promise<void> {
-        await this.mongoConnection.close();
+        await this.mongoConnection?.close();
     }
 
     /**
      * Stores members into the Mongo Database in the data collection.
-     * 
-     * @param member 
-     * @param timestamp 
+     *
+     * @param member
+     * @param timestamp
      */
     public async storeMembers(member: Member[]): Promise<void> {
         const dataElements: { id: string, data: string, timestamp?: string }[] = []
@@ -114,10 +116,10 @@ export class MongoDBIngestor extends AbstractIngestor {
         await this.dbDataCollection.insertMany(dataElements);
     }
     /**
-     * Stores members into the Mongo Database in the index collection.
-     * 
-     * @param member 
-     * @param timestamp 
+     * Stores a bucket into the Mongo Database in the index collection.
+     *
+     * @param member
+     * @param timestamp
      */
     public async createBucket(bucketIdentifier: string): Promise<void> {
         const bucket: MongoFragment = {
@@ -139,66 +141,128 @@ export class MongoDBIngestor extends AbstractIngestor {
         // TODO: handle bucket itself not existing
         await this.dbIndexCollection.updateOne({ id: bucketIdentifier, streamId: this.sdsStreamIdentifier }, { "$push": { relations: { "$each": relations } } });
     }
+
+    protected async bucketExists(bucketIdentifier: string): Promise<boolean> {
+        const exists = await this.dbIndexCollection.findOne({ streamId: this.sdsStreamIdentifier, id: bucketIdentifier });
+        if (exists) {
+            return true
+        }
+        return false
+    }
 }
 
 export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
+    protected _pageSize?: number;
+    protected _timestampPath?: string;
+    protected _metadata?: any; // TODO: ldes and sds metadata?
+    protected root = "";
 
+
+    private get pageSize(): number {
+        return this._pageSize ?? Infinity;
+    }
+
+    private get timestampPath(): string {
+        if (!this._timestampPath) throw Error("TimestampPath was not configured");
+        return this._timestampPath;
+    }
 
     // initializes a LDES-TS if it does not exist yet.
     // Otherwise, just starts up the database
     async instantiate(config: string): Promise<void> {
         await this.initialise(config)
 
+        // extract metadata from config | TODO: if config does not exist, extract from db
+        this._pageSize = 50;
+        this._timestampPath = "http://www.w3.org/ns/sosa/resultTime";
+        this._metadata = config;
+        const date = new Date("2022-08-07T08:08:21Z"); // TODO: replace with real value
+
+        if (await this.bucketExists(this.root)) {
+            return
+        }
+
         // only if the root does not exist yet
-        await this.createBucket("")
+        await this.createBucket(this.root)
 
         // create first window
-        const date = new Date(); //TODO: replace with real value
-        await this.createWindow(date.valueOf() + '', date);
-        await this.addWindowToRoot(date.valueOf() + "");
-    }
-
-
-    async getMostRecentWindow(): Promise<string> {
-
-        const mostRecentBucket = await this.dbIndexCollection.find({streamId:this.sdsStreamIdentifier}).sort({"start": -1}).limit(1).next();
-        if (!mostRecentBucket){
-            throw Error("no buckets present")
+        const firstWindow : Window= {
+            identifier: date.valueOf() + '',
+            start: date
         }
-        return mostRecentBucket.id;
+        await this.createWindow(firstWindow);
+        await this.addWindowToRoot(firstWindow);
     }
 
-    async bucketSize(bucketIdentifier: string): Promise<number> {
-        const bucket = await this.dbIndexCollection.findOne({id:bucketIdentifier,streamId:this.sdsStreamIdentifier})
+
+    async getMostRecentWindow(): Promise<Window> {
+        const mostRecentBucket = await this.dbIndexCollection.find({ streamId: this.sdsStreamIdentifier }).sort({ "start": -1 }).limit(1).next();
+        if (!mostRecentBucket) {
+            throw Error("No buckets present")
+        }
+
+        return this.documentToWindow(mostRecentBucket);
+    }
+
+    /**
+     * Transforms a MongoDB document to a {@link Window}.
+     * @param document
+     * @returns
+     */
+    protected documentToWindow(document: WithId<Document>): Window {
+        return {
+            identifier: document.id,
+            memberIdentifiers: document.members,
+            start: new Date(document.start),
+            end: new Date(document.start)
+        }
+    }
+
+    async bucketSize(window: Window): Promise<number> {
+        const bucket = await this.dbIndexCollection.findOne({ id: window.identifier, streamId: this.sdsStreamIdentifier });
         if (!bucket) {
-            throw Error("Bucket not found")
-        }        
+            throw Error("Window with identifier " + window.identifier + " was not found in the database");
+        }
         return bucket.members.length;
     }
 
-    async createWindow(bucketIdentifier: string, start: Date, end?: Date | undefined): Promise<void> {
-        await this.createBucket(bucketIdentifier);
+    async createWindow(window: Window): Promise<void> {
+        const { identifier, start, end } = window;
 
-        const windowParams: any = {
-            start: start.toISOString()
+        await this.createBucket(identifier);
+
+        const windowParams: any = {};
+        if (start) {
+            windowParams.start = start.toISOString();
         }
         if (end) {
-            windowParams.end = end.toISOString()
+            windowParams.end = end.toISOString();
         }
-        await this.dbIndexCollection.updateOne({ streamId: this.sdsStreamIdentifier, id: bucketIdentifier }, { "$set": windowParams })
+        await this.dbIndexCollection.updateOne({ streamId: this.sdsStreamIdentifier, id: identifier }, { "$set": windowParams });
     }
 
-    async updateWindow(bucketIdentifier: string, start: Date, end: Date): Promise<void> {
-        throw new Error("Method not implemented.");
+    async updateWindow(window: Window): Promise<void> {
+        const { identifier, start, end } = window;
+
+        const windowParams: any = {};
+        if (start) {
+            windowParams.start = start.toISOString();
+        }
+        if (end) {
+            windowParams.end = end.toISOString();
+        }
+        await this.dbIndexCollection.updateOne({ streamId: this.sdsStreamIdentifier, id: identifier }, { "$set": windowParams })
     }
 
-    async addWindowToRoot(bucketIdentifier: string): Promise<void> {
-        const date = new Date(Number(bucketIdentifier));
-        await this.addRelationsToBucket("", [{
+    async addWindowToRoot(window: Window): Promise<void> {
+        const { identifier, start } = window;
+
+        if (!start) throw Error("Can not add window " + identifier + " to the root as it has no start date value");
+        await this.addRelationsToBucket(this.root, [{
             type: RelationType.GreaterThanOrEqualTo,
-            value: date.toISOString(),
-            path: "http://www.w3.org/ns/sosa/resultTime", // TODO: hardcoded currently
-            bucket: bucketIdentifier
+            value: start.toISOString(),
+            path: this.timestampPath,
+            bucket: identifier
         }])
     }
 
@@ -206,25 +270,34 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
         const currentWindow = await this.getMostRecentWindow();
         const bucketSize = await this.bucketSize(currentWindow);
 
-        if (bucketSize + 1 > 50) { // TODO: replace by actual pagesize
-            const memberDate = new Date() // TODO: extract from member itself
-            await this.createWindow(memberDate.valueOf()+'', memberDate);
-            await this.addWindowToRoot(memberDate.valueOf()+'')
+        if (bucketSize + 1 > this.pageSize) {
+            const memberDate = extractDate(new Store(member.quads), this.timestampPath);
+            const newWindow : Window= {
+                identifier: memberDate.valueOf() + '',
+                start: memberDate
+            }
+            // create new window
+            await this.createWindow(newWindow);
+            await this.addWindowToRoot(newWindow)
 
-            // todo: update other window its end time
-
+            // add end date to old window
+            currentWindow.end = memberDate;
+            await this.updateWindow(currentWindow)
+            await this.addRelationsToBucket(this.root, [{
+                type: RelationType.LessThan,
+                value: memberDate.toISOString(),
+                path: this.timestampPath,
+                bucket: currentWindow.identifier
+            }])
         } else {
             await this.storeMember(member);
-            await this.addMemberstoBucket(currentWindow, [member.id.value]);
+            await this.addMemberstoBucket(currentWindow.identifier, [member.id.value]);
         }
     }
     async publish(members: Member[]): Promise<void> {
-        // inefficent implementation
+        // inefficient implementation
         for (const member of members) {
             await this.append(member);
         }
-        // members.forEach(async (member) => {
-        //     await this.append(member);
-        // })
     }
 }

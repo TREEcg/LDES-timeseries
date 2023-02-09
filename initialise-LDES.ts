@@ -3,7 +3,7 @@
 import { extractMembers, N3Support, RDF, turtleStringToStore } from '@treecg/ldes-snapshot';
 import { RelationType, SDS } from '@treecg/types';
 import { readFileSync } from 'fs';
-import { storeFromFile } from './src/util';
+import { storeFromFile } from './src/Util';
 import { MongoDBIngestor } from './src/MongoDBIngestor'
 /**
  * See https://treecg.github.io/SmartDataStreams-Spec/#sds-description%E2%91%A0 for more information
@@ -56,7 +56,7 @@ async function main() {
     await ingestor.createBucket(rootBucket);
     await ingestor.createBucket(bucketName); // Note: Currently an unsafe method: can create same bucket multiple times
     console.log("bucket created");
-    
+
     // create a member
     await ingestor.storeMembers(members); // Note: currently an unsafe method: can store member multiple times
     console.log("member added");
@@ -65,7 +65,7 @@ async function main() {
     await ingestor.addMemberstoBucket(rootBucket, members.map(member => member.id.value)) // Note: currently an unsafe method: can add member multiple times to a given fragment
     await ingestor.addMemberstoBucket(bucketName, members.map(member => member.id.value))
     console.log("add member to bucket");
-    
+
     // add relation to first relation
     await ingestor.addRelationsToBucket(rootBucket,[{
         type: RelationType.GreaterThanOrEqualTo,
@@ -74,7 +74,7 @@ async function main() {
         path: "http://www.w3.org/ns/sosa/resultTime"
     }]);
     console.log("Add a relation from "+ rootBucket + " to " + bucketName);
-    
+
     // TODO: configure LDES store to work with the newly created LDES.
     // changed config to work with my database
     // $ npx @treecg/actor-init-ldes-client http://localhost:3000/ldes/example --disableSynchronization true
