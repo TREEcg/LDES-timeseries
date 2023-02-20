@@ -24,7 +24,6 @@
     "css:config/ldp/metadata-parser/default.json",
     "lss:config/ldp/metadata-writer/default.json",
     "css:config/ldp/modes/default.json",
-    "lss:config/storage/backend/ldes.json",
     "css:config/storage/backend/data-accessors/memory.json",
     "css:config/storage/key-value/memory.json",
     "css:config/storage/middleware/default.json",
@@ -61,12 +60,41 @@
         },
         {
           "@type": "RegexRule",
-          "regex": "/ldes/",
+          "regex": { "@id": "urn:solid-server:default:relative-path" },
           "store": {
             "comment": "A more complex example with 3 different stores being routed to.",
             "@type": "RepresentationConvertingStore",
             "source": {
-              "@id": "urn:solid-server:default:LDESResourceStore"
+              "@type": "LDESStore",
+              "id": "http://mine.org/testing",
+              "base": { "@id": "urn:solid-server:default:variable:baseUrl" },
+              "relativePath":  { "@id": "urn:solid-server:default:relative-path" },
+              "views": [
+                {
+                  "@type": "PrefixView",
+                  "prefix": "example",
+                  "view": {
+                    "@type": "MongoTSView",
+                    "streamId": "http://example.org/myStream#eventStream",
+                    "descriptionId": "http://example.org/myStream#viewDescription",
+                    "db": {
+                      "@id": "urn:solid-server:default:DBConfig"
+                    }
+                  }
+                },
+                {
+                  "@type": "PrefixView",
+                  "prefix": "ais",
+                  "view": {
+                    "@type": "MongoTSView",
+                    "streamId": "http://example.org/aisStream#eventStream",
+                    "descriptionId": "http://example.org/aisStream#description",
+                    "db": {
+                      "@id": "urn:solid-server:default:DBConfig"
+                    }
+                  }
+                }
+              ]
             },
             "options_outConverter": {
               "@id": "urn:solid-server:default:RepresentationConverter"
@@ -92,33 +120,16 @@
       }
     },
     {
-      "@id": "urn:solid-server:default:LDESConfig",
-      "@type": "LDESViews",
-      "views": [
-        {
-          "@type": "LDESView",
-          "prefix": "default",
-          "streamId": "http://me#csvStream"
-        },
-        {
-          "@type": "LDESView",
-          "prefix": "mine",
-          "streamId": "http://mine.org/rdfstream"
-        },
-        {
-          "@type": "LDESView",
-          "prefix": "example",
-          "streamId": "http://example.org/sds"
-        }
-      ]
-    },
-    {
-      "@id": "urn:solid-server:default:LDESDBConfig",
+      "@id": "urn:solid-server:default:DBConfig",
       "@type": "DBConfig",
       "metaCollection": "meta",
       "indexCollection": "index",
       "membersCollection": "data",
       "dbUrl": "mongodb://localhost:27017/ldes"
+    },
+    {
+      "@id": "urn:solid-server:default:relative-path",
+      "valueRaw": "/ldes/"
     }
   ]
 }

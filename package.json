@@ -5,7 +5,8 @@
     "@treecg/ldes-snapshot": "^0.1.0",
     "@treecg/sds-storage-writer-mongo": "^0.0.3",
     "mongodb": "^5.0.0",
-    "ts-node": "^10.9.1"
+    "ts-node": "^10.9.1",
+    "ldes-solid-server": "file:../ldes-solid-server"
   },
   "devDependencies": {
     "@types/node": "^18.11.19"

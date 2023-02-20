@@ -3,7 +3,8 @@ import { Member, SDS } from '@treecg/types';
 import { Collection, Db, Document, MongoClient } from "mongodb";
 import { AbstractIngestor, IngestorConfig, IRelation } from './AbstractIngestor';
 import { quadsToString } from '../util/Util';
-
+import { turtleStringToStore } from "@treecg/ldes-snapshot";
+import { Store } from 'n3'
 export interface MongoDBIngestorConfig extends IngestorConfig {
     /**
      * The name of the MongoDB Collection for the SDS metadata information.
@@ -74,15 +75,15 @@ export class MongoDBIngestor extends AbstractIngestor {
     }
 
     protected async streamExists(): Promise<boolean> {
-        const streamExists = await this.dbMetaCollection.findOne({ id: this.sdsStreamIdentifier });
+        const streamExists = await this.dbMetaCollection.findOne({ id: this.streamIdentifier });
         if (streamExists) return true
         return false
     }
 
-    protected async getSDSMetadata(): Promise<string> {
-        const metadata = await this.dbMetaCollection.findOne({ id: this.sdsStreamIdentifier });
+    protected async getStreamMetadata(): Promise<Store> {
+        const metadata = await this.dbMetaCollection.findOne({ id: this.streamIdentifier });
         if (!metadata) throw Error("does not exist yet")
-        return metadata.value;
+        return await turtleStringToStore(metadata.value);
     }
 
     protected async startConnection(): Promise<void> {
@@ -102,7 +103,7 @@ export class MongoDBIngestor extends AbstractIngestor {
 
         if (!sdsMetadata) throw Error("No way to create SDS metadata, can be done later maybe.")
 
-        await this.dbMetaCollection.insertOne({ id: this.sdsStreamIdentifier, value: sdsMetadata, type: SDS.Stream }, {});
+        await this.dbMetaCollection.insertOne({ id: this.streamIdentifier, value: sdsMetadata, type: SDS.Stream }, {});
     }
 
     public async exit(): Promise<void> {
@@ -136,7 +137,7 @@ export class MongoDBIngestor extends AbstractIngestor {
     public async createBucket(bucketIdentifier: string): Promise<void> {
         const bucket: MongoFragment = {
             id: bucketIdentifier,
-            streamId: this.sdsStreamIdentifier,
+            streamId: this.streamIdentifier,
             leaf: true,
             relations: [],
             count: 0,
@@ -146,16 +147,16 @@ export class MongoDBIngestor extends AbstractIngestor {
     }
 
     public async addMemberstoBucket(bucketIdentifier: string, memberIDs: string[]): Promise<void> {
-        await this.dbIndexCollection.updateOne({ id: bucketIdentifier, streamId: this.sdsStreamIdentifier }, { "$push": { members: { "$each": memberIDs } } });
+        await this.dbIndexCollection.updateOne({ id: bucketIdentifier, streamId: this.streamIdentifier }, { "$push": { members: { "$each": memberIDs } } });
     }
     public async addRelationsToBucket(bucketIdentifier: string, relations: IRelation[]): Promise<void> {
         // TODO: handle bucket in relation not existing
         // TODO: handle bucket itself not existing
-        await this.dbIndexCollection.updateOne({ id: bucketIdentifier, streamId: this.sdsStreamIdentifier }, { "$push": { relations: { "$each": relations } } });
+        await this.dbIndexCollection.updateOne({ id: bucketIdentifier, streamId: this.streamIdentifier }, { "$push": { relations: { "$each": relations } } });
     }
 
     protected async bucketExists(bucketIdentifier: string): Promise<boolean> {
-        const exists = await this.dbIndexCollection.findOne({ streamId: this.sdsStreamIdentifier, id: bucketIdentifier });
+        const exists = await this.dbIndexCollection.findOne({ streamId: this.streamIdentifier, id: bucketIdentifier });
         if (exists) {
             return true
         }
@@ -163,7 +164,7 @@ export class MongoDBIngestor extends AbstractIngestor {
     }
 
     protected async getBucket(bucketIdentifier: string): Promise<MongoFragment> {
-        const bucket = await this.dbIndexCollection.findOne({ streamId: this.sdsStreamIdentifier, id: bucketIdentifier });
+        const bucket = await this.dbIndexCollection.findOne({ streamId: this.streamIdentifier, id: bucketIdentifier });
         if (!bucket) throw Error("bucket does not exist")
         return bucket;
     }

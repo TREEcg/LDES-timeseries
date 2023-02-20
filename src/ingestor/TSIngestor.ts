@@ -24,11 +24,7 @@ export interface Window {
 /**
  * Interface to instantiate an {@link TSIngestor}.
  */
-export interface LDESTSConfig {
-    /**
-     * Identifier of the SDS stream.
-     */
-    sdsStreamIdentifier: string;
+export interface LDESTSOptions {
     /**
      * SHACL property path used to indicate on which member property the relation applies.
      */
@@ -48,7 +44,7 @@ export interface LDESTSConfig {
  * Furthermore implementing the interface allows for easily creating new windows for the TS.
  */
 export interface TSIngestor {
-    instantiate(config: LDESTSConfig): Promise<void>;
+    instantiate(config: LDESTSOptions): Promise<void>;
     /**
      * Creates a window.
      * @param window

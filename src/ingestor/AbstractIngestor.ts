@@ -9,26 +9,34 @@ export interface IRelation {
 
 export interface IngestorConfig {
     /**
-     * The identifier of the SDS Stream
+     * The Stream Identifier
      */
-    sdsStreamIdentifier: string
+    streamIdentifier: string
 }
 
 
 export abstract class AbstractIngestor {
-    protected sdsStreamIdentifier: string;
+    protected streamIdentifier: string;
 
     public constructor(config: IngestorConfig) {
-        this.sdsStreamIdentifier = config.sdsStreamIdentifier;
+        this.streamIdentifier = config.streamIdentifier;
     }
 
     /**
-     * Sets up the DB connection.
+     * Starts the database connection.
+     */
+    protected abstract startConnection(): Promise<void>
+
+    /**
+     * Sets up the database connection.
      * If the SDS Stream does not exist yet, persists metadata of the SDS stream in the database.
      * @param sdsMetadata - The SDS metadata for the SDS Stream.
      */
     public abstract initialise(sdsMetadata?: string): Promise<void>;
 
+    /**
+     * Closes the connection to the database.
+     */
     public abstract exit(): Promise<void>;
     /**
      * Persists members in the database.

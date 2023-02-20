@@ -2,10 +2,14 @@ import { extractDate, LDES, Logger, storeToString, turtleStringToStore } from "@
 import { Member, RDF, RelationType, SDS } from '@treecg/types';
 import { Document, WithId } from "mongodb";
 import { DataFactory, Store } from 'n3';
-import { MongoDBIngestor } from "./MongoDBIngestor";
-import { LDESTSConfig, TSIngestor, Window } from "./TSIngestor";
+import { MongoDBIngestor, MongoDBIngestorConfig } from "./MongoDBIngestor";
+import { LDESTSOptions, TSIngestor, Window } from "./TSIngestor";
+import { IViewDescription, MongoTSViewDescription, ViewDescription } from "ldes-solid-server";
 const { namedNode, literal } = DataFactory;
 
+export interface TSMongoDBIngestorConfig extends MongoDBIngestorConfig {
+    viewDescriptionIdentifier: string
+}
 /**
  * Implements {@link TSIngestor} to store an LDES TSin a Mongo database.
  */
@@ -16,6 +20,12 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
     protected root = "";
     protected logger = new Logger(this);
 
+    protected viewDescriptionIdentifier: string;
+
+    public constructor(config: TSMongoDBIngestorConfig) {
+        super(config);
+        this.viewDescriptionIdentifier = config.viewDescriptionIdentifier;
+    }
 
     private get pageSize(): number {
         return this._pageSize ?? Infinity;
@@ -27,31 +37,37 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
         return this._timestampPath;
     }
 
-    async instantiate(config: LDESTSConfig): Promise<void> {
+    async instantiate(config: LDESTSOptions): Promise<void> {
         await this.startConnection();
         if (await this.streamExists()) {
-            const metadata = await this.getSDSMetadata();
-            const metadataStore = await turtleStringToStore(metadata);
+            const metadataStore = await this.getStreamMetadata(); // Note: currently a single stream can only have one viewDescription!! -> TODO: overwrite getMetadata
+            const mongoTSVD = new MongoTSViewDescription(this.viewDescriptionIdentifier, this.streamIdentifier);
+            const viewDescription = mongoTSVD.parseViewDescription(metadataStore);
 
-            const ldesNode = metadataStore.getQuads(this.sdsStreamIdentifier, SDS.terms.dataset, null, null)[0].object;
-            this._timestampPath = metadataStore.getQuads(ldesNode, LDES.timestampPath, null, null)[0].object.value;
-            const pageSizeExists = metadataStore.getQuads(ldesNode, LDES.pageSize, null, null)[0];
-            if (pageSizeExists) {
-                this._pageSize = Number(pageSizeExists.object.value);
+            this._timestampPath = viewDescription.managedBy.bucketizeStrategy.path;
+            if (viewDescription.managedBy.bucketizeStrategy.pageSize) {
+                this._pageSize = viewDescription.managedBy.bucketizeStrategy.pageSize;
             } else {
                 this._pageSize = Infinity;
             }
-            this.logger.info(`SDS exists already. timestampPath ${this.timestampPath} | pageSize ${this.pageSize}.`);
+            this.logger.info(`View with description "${this.viewDescriptionIdentifier} for stream "${this.streamIdentifier}" exists already. timestampPath ${this.timestampPath} | pageSize ${this.pageSize}.`);
             return;
         }
         const { pageSize, timestampPath } = config;
-        const sdsMetadata = this.makeSDSConfig(config);
-        await this.initialise(sdsMetadata);
+        
+        // Create metadata
+        const viewDescription = this.createTSViewDescription(config); 
+        await this.dbMetaCollection.insertOne({ 
+            id: this.streamIdentifier, 
+            descriptionId: this.viewDescriptionIdentifier, 
+            type: LDES.EventStream, 
+            value: storeToString(viewDescription.getStore()) 
+        })
 
         // extract metadata from config
         this._pageSize = pageSize ?? Infinity;
         this._timestampPath = timestampPath;
-        this._metadata = sdsMetadata;
+        this._metadata = viewDescription;
         const date = config.date ?? new Date();
 
         // create root
@@ -65,12 +81,12 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
         await this.createWindow(firstWindow);
         await this.addWindowToRoot(firstWindow);
 
-        this.logger.info(`Initialialise SDS. Time Series oldest relation: ${date.toISOString()} | timestampPath ${this.timestampPath} | pageSize ${this.pageSize}.`);
+        this.logger.info(`Initialialise TS View. Time Series oldest relation: ${date.toISOString()} | timestampPath ${this.timestampPath} | pageSize ${this.pageSize}.`);
     }
 
 
     async getMostRecentWindow(): Promise<Window> {
-        const mostRecentBucket = await this.dbIndexCollection.find({ streamId: this.sdsStreamIdentifier }).sort({ "start": -1 }).limit(1).next();
+        const mostRecentBucket = await this.dbIndexCollection.find({ streamId: this.streamIdentifier }).sort({ "start": -1 }).limit(1).next();
         if (!mostRecentBucket) {
             throw Error("No buckets present");
         }
@@ -110,7 +126,7 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
         if (end) {
             windowParams.end = end.toISOString();
         }
-        await this.dbIndexCollection.updateOne({ streamId: this.sdsStreamIdentifier, id: identifier }, { "$set": windowParams });
+        await this.dbIndexCollection.updateOne({ streamId: this.streamIdentifier, id: identifier }, { "$set": windowParams });
     }
 
     async updateWindow(window: Window): Promise<void> {
@@ -123,7 +139,7 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
         if (end) {
             windowParams.end = end.toISOString();
         }
-        await this.dbIndexCollection.updateOne({ streamId: this.sdsStreamIdentifier, id: identifier }, { "$set": windowParams });
+        await this.dbIndexCollection.updateOne({ streamId: this.streamIdentifier, id: identifier }, { "$set": windowParams });
     }
 
     async addWindowToRoot(window: Window): Promise<void> {
@@ -144,6 +160,9 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
         const bucketSize = await this.bucketSize(currentWindow);
 
         if (bucketSize + 1 > this.pageSize) {
+            this.logger.debug('bucketSize: ' + bucketSize)
+            this.logger.debug('pageSize: ' + this.pageSize)
+
             const memberDate = extractDate(new Store(member.quads), this.timestampPath);
             const newWindow: Window = {
                 identifier: memberDate.valueOf() + '',
@@ -181,24 +200,12 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
     }
 
     /**
-     * Creates an SDS configuration that contains the information so the LDES Solid Server can host the LDES.
-     * Furthermore, {@link TSMongoDBIngestor} is initialised correctly using this configuration.
-     * @param config 
-     * @returns 
+     * Creates a TS Viewdescription that contains the metadata so the LDES Solid Server can serve the LDES.
+     * @param config
+     * @returns {ViewDescription}
      */
-    private makeSDSConfig(config: LDESTSConfig): string {
-        const { sdsStreamIdentifier, timestampPath, pageSize } = config;
-        const dataSetNode = namedNode("http://example.org/sds#dataset");
-        const sdsMetadataStore = new Store();
-        sdsMetadataStore.addQuad(namedNode(sdsStreamIdentifier), RDF.terms.type, SDS.terms.Stream);
-        sdsMetadataStore.addQuad(namedNode(sdsStreamIdentifier), SDS.terms.carries, SDS.terms.Member);
-        sdsMetadataStore.addQuad(namedNode(sdsStreamIdentifier), SDS.terms.dataset, dataSetNode);
-
-        sdsMetadataStore.addQuad(dataSetNode, RDF.terms.type, LDES.terms.EventStream);
-        sdsMetadataStore.addQuad(dataSetNode, LDES.terms.timestampPath, namedNode(timestampPath));
-        if (pageSize) {
-            sdsMetadataStore.addQuad(dataSetNode, LDES.terms.pageSize, literal(pageSize));
-        }
-        return storeToString(sdsMetadataStore);
+    private createTSViewDescription(config: LDESTSOptions): IViewDescription {
+        const mongoTSVD = new MongoTSViewDescription(this.viewDescriptionIdentifier, this.streamIdentifier);
+        return mongoTSVD.generateViewDescription(config);
     }
 }

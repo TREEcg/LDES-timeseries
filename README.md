@@ -26,21 +26,20 @@ import { storeFromFile, TSMongoDBIngestor } from "./";
 
 async function main() {
     // load some members
-    const fileName = "./location-LDES.ttl"
+    const fileName = "./data/location-LDES.ttl"
     const ldesIdentifier = "http://localhost:3000/lil/#EventStream"
     const store = await storeFromFile(fileName);
     const members = extractMembers(store, ldesIdentifier);
 
+    const streamIdentifier = "http://example.org/myStream#eventStream"
+    const viewDescriptionIdentifier = "http://example.org/myStream#viewDescription"
 
-    const sdsIdentifier = "http://example.org/sds"
     const ldesTSConfig = {
-        sdsStreamIdentifier: sdsIdentifier,
         timestampPath: "http://www.w3.org/ns/sosa/resultTime",
         pageSize: 50,
         date: new Date("2022-08-07T08:08:21Z")
     }
-    const ingestor = new TSMongoDBIngestor({ sdsStreamIdentifier: sdsIdentifier });
-
+    const ingestor = new TSMongoDBIngestor({ streamIdentifier: streamIdentifier, viewDescriptionIdentifier: viewDescriptionIdentifier });
 
     await ingestor.instantiate(ldesTSConfig);
     await ingestor.publish(members)
@@ -48,11 +47,12 @@ async function main() {
     await ingestor.exit();
 }
 main()
+
 ```
 
 Now that there are members and fragmentations stored in the database, they can be hosted using the [LDES Solid Server](https://github.com/TREEcg/ldes-solid-server).
 
-For this you have to run the server with [this ldes-config](./ldes-storeConfig/config-ldes.json).
+For this you have to run the server with [this config](./ldes-storeConfig/config.json).
 
 At this point, you can see the LDES at [http://localhost:3000/ldes/example](http://localhost:3000/ldes/example)
 
