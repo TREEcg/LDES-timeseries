@@ -1,5 +1,7 @@
 # LDES Timeseries
 
+[![npm](https://img.shields.io/npm/v/@treecg/ldes-timeseries)](https://www.npmjs.com/package/@treecg/ldes-timeseries)
+
 Add members to an LDES Time Series in different kinds of databases.
 
 Databases implemented so far
@@ -53,6 +55,10 @@ main()
 Now that there are members and fragmentations stored in the database, they can be hosted using the [LDES Solid Server](https://github.com/TREEcg/ldes-solid-server).
 
 For this you have to run the server with [this config](./ldes-storeConfig/config.json).
+
+```
+npx community-solid-server -c ldes-storeConfig/config.json
+```
 
 At this point, you can see the LDES at [http://localhost:3000/ldes/example](http://localhost:3000/ldes/example)
 
