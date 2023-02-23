@@ -10,6 +10,7 @@ Databases implemented so far
 - [ ] MongoDB Timeseries (see [RINF-LDES](https://github.com/SEMICeu/RINF-LDES))
 - [ ] [InfluxDB](https://www.influxdata.com/)
 - [ ] [TimeScaleDB](https://www.timescale.com/): Postgres for time-series
+- [ ] [Prometheus](https://prometheus.io/)
 - [ ] Apacha Kafka ?
 - [ ] Plain file ?
 
