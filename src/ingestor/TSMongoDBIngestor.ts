@@ -27,11 +27,11 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
         this.viewDescriptionIdentifier = config.viewDescriptionIdentifier;
     }
 
-    private get pageSize(): number {
+    protected get pageSize(): number {
         return this._pageSize ?? Infinity;
     }
 
-    private get timestampPath(): string {
+    protected get timestampPath(): string {
         if (!this._timestampPath)
             throw Error("TimestampPath was not configured");
         return this._timestampPath;
@@ -54,14 +54,14 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
             return;
         }
         const { pageSize, timestampPath } = config;
-        
+
         // Create metadata
-        const viewDescription = this.createTSViewDescription(config); 
-        await this.dbMetaCollection.insertOne({ 
-            id: this.streamIdentifier, 
-            descriptionId: this.viewDescriptionIdentifier, 
-            type: LDES.EventStream, 
-            value: storeToString(viewDescription.getStore()) 
+        const viewDescription = this.createTSViewDescription(config);
+        await this.dbMetaCollection.insertOne({
+            id: this.streamIdentifier,
+            descriptionId: this.viewDescriptionIdentifier,
+            type: LDES.EventStream,
+            value: storeToString(viewDescription.getStore())
         })
 
         // extract metadata from config
