@@ -1,15 +1,18 @@
-import { extractDate, LDES, Logger, storeToString, turtleStringToStore } from "@treecg/ldes-snapshot";
-import { Member, RDF, RelationType, SDS } from '@treecg/types';
-import { Document, WithId } from "mongodb";
-import { DataFactory, Store } from 'n3';
-import { MongoDBIngestor, MongoDBIngestorConfig } from "./MongoDBIngestor";
-import { LDESTSOptions, TSIngestor, Window } from "./TSIngestor";
-import { IViewDescription, MongoTSViewDescription, ViewDescription } from "ldes-solid-server";
-const { namedNode, literal } = DataFactory;
+import {extractDate, LDES, Logger, storeToString, turtleStringToStore} from "@treecg/ldes-snapshot";
+import {Member, RDF, RelationType, SDS} from '@treecg/types';
+import {Document, WithId} from "mongodb";
+import {DataFactory, Store} from 'n3';
+import {MongoDBIngestor, MongoDBIngestorConfig} from "./MongoDBIngestor";
+import {LDESTSOptions, TSIngestor, Window} from "./TSIngestor";
+import {Fragment, IViewDescription, MongoTSViewDescription, ViewDescription} from "ldes-solid-server";
+import {MongoFragment} from "@treecg/sds-storage-writer-mongo/lib/fragmentHelper";
+
+const {namedNode, literal} = DataFactory;
 
 export interface TSMongoDBIngestorConfig extends MongoDBIngestorConfig {
     viewDescriptionIdentifier: string
 }
+
 /**
  * Implements {@link TSIngestor} to store an LDES TSin a Mongo database.
  */
@@ -53,7 +56,7 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
             this.logger.info(`View with description "${this.viewDescriptionIdentifier} for stream "${this.streamIdentifier}" exists already. timestampPath ${this.timestampPath} | pageSize ${this.pageSize}.`);
             return;
         }
-        const { pageSize, timestampPath } = config;
+        const {pageSize, timestampPath} = config;
 
         // Create metadata
         const viewDescription = this.createTSViewDescription(config);
@@ -84,9 +87,16 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
         this.logger.info(`Initialialise TS View. Time Series oldest relation: ${date.toISOString()} | timestampPath ${this.timestampPath} | pageSize ${this.pageSize}.`);
     }
 
+    protected async getWindow(identifier: string) {
+        const bucket = await this.getBucket(identifier)
+        if (!bucket) {
+            throw Error(`Bucket with identifier "${identifier}" for stream ${this.streamIdentifier}} was not found in the database.`);
+        }
+        return this.fragmentToWindow(bucket);
+    }
 
     async getMostRecentWindow(): Promise<Window> {
-        const mostRecentBucket = await this.dbIndexCollection.find({ streamId: this.streamIdentifier }).sort({ "start": -1 }).limit(1).next();
+        const mostRecentBucket = await this.dbIndexCollection.find({streamId: this.streamIdentifier}).sort({"start": -1}).limit(1).next();
         if (!mostRecentBucket) {
             throw Error("No buckets present");
         }
@@ -108,6 +118,15 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
         };
     }
 
+    protected fragmentToWindow(fragment: { id?: string, members?: string[], start?: string, end?: string }): Window {
+        const {id, members, start, end} = fragment
+        return {
+            identifier: id!,
+            memberIdentifiers: members,
+            start:  start ? new Date(start) : undefined,
+            end: end ? new Date(end) : undefined
+        }
+    }
     async bucketSize(window: Window): Promise<number> {
         const bucket = await this.getBucket(window.identifier);
         if (!bucket.members) return 0; // though members should always exist
@@ -115,7 +134,7 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
     }
 
     async createWindow(window: Window): Promise<void> {
-        const { identifier, start, end } = window;
+        const {identifier, start, end} = window;
 
         await this.createBucket(identifier);
 
@@ -126,11 +145,14 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
         if (end) {
             windowParams.end = end.toISOString();
         }
-        await this.dbIndexCollection.updateOne({ streamId: this.streamIdentifier, id: identifier }, { "$set": windowParams });
+        await this.dbIndexCollection.updateOne({
+            streamId: this.streamIdentifier,
+            id: identifier
+        }, {"$set": windowParams});
     }
 
     async updateWindow(window: Window): Promise<void> {
-        const { identifier, start, end } = window;
+        const {identifier, start, end} = window;
 
         const windowParams: any = {};
         if (start) {
@@ -139,11 +161,14 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
         if (end) {
             windowParams.end = end.toISOString();
         }
-        await this.dbIndexCollection.updateOne({ streamId: this.streamIdentifier, id: identifier }, { "$set": windowParams });
+        await this.dbIndexCollection.updateOne({
+            streamId: this.streamIdentifier,
+            id: identifier
+        }, {"$set": windowParams});
     }
 
     async addWindowToRoot(window: Window): Promise<void> {
-        const { identifier, start } = window;
+        const {identifier, start} = window;
 
         if (!start)
             throw Error("Can not add window " + identifier + " to the root as it has no start date value");

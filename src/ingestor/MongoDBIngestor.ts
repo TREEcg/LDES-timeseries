@@ -131,8 +131,7 @@ export class MongoDBIngestor extends AbstractIngestor {
     /**
      * Stores a bucket into the Mongo Database in the index collection.
      *
-     * @param member
-     * @param timestamp
+     * @param bucketIdentifier
      */
     public async createBucket(bucketIdentifier: string): Promise<void> {
         const bucket: MongoFragment = {
@@ -146,6 +145,14 @@ export class MongoDBIngestor extends AbstractIngestor {
         await this.dbIndexCollection.insertOne(bucket);
     }
 
+    /**
+     * Remove a bucket from the Mongo Database in the index collection.
+     * @param bucketIdentifier
+     * @return {Promise<void>}
+     */
+    public async deleteBucket(bucketIdentifier: string): Promise<void> {
+        await this.dbIndexCollection.deleteMany({streamId: this.streamIdentifier ,id:bucketIdentifier})
+    }
     public async addMemberstoBucket(bucketIdentifier: string, memberIDs: string[]): Promise<void> {
         await this.dbIndexCollection.updateOne({ id: bucketIdentifier, streamId: this.streamIdentifier }, { "$push": { members: { "$each": memberIDs } } });
     }

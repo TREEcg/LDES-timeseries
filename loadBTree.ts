@@ -13,9 +13,11 @@ async function main() {
     const streamIdentifier = "http://example.org/myStream#eventStream"
     const viewDescriptionIdentifier = "http://example.org/myStream#viewDescription"
 
+    const pageSize = 2;
+    const layerSize = 10;
     const ldesTSConfig = {
         timestampPath: "http://www.w3.org/ns/sosa/resultTime",
-        pageSize: 50,
+        pageSize: pageSize,
         date: new Date("2022-08-07T08:08:21Z")
     }
     const ingestor = new TSMongoDBIngestorBTREE({ streamIdentifier: streamIdentifier, viewDescriptionIdentifier: viewDescriptionIdentifier });
@@ -23,7 +25,7 @@ async function main() {
 
     await ingestor.instantiate(ldesTSConfig);
 
-    await ingestor.addWindow(new Date())
+    await ingestor.publish(members.slice(0,400));
     await ingestor.exit();
 }
 main()
