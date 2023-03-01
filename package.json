@@ -1,6 +1,6 @@
 {
   "name": "@treecg/ldes-timeseries",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "main": "dist/Index.js",
   "types": "dist/Index.d.ts",
   "dependencies": {

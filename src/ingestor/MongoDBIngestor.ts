@@ -1,10 +1,11 @@
-import { MongoFragment } from "@treecg/sds-storage-writer-mongo/lib/fragmentHelper";
-import { Member, SDS } from '@treecg/types';
-import { Collection, Db, Document, MongoClient } from "mongodb";
-import { AbstractIngestor, IngestorConfig, IRelation } from './AbstractIngestor';
-import { quadsToString } from '../util/Util';
-import { turtleStringToStore } from "@treecg/ldes-snapshot";
-import { Store } from 'n3'
+import {MongoFragment} from "@treecg/sds-storage-writer-mongo/lib/fragmentHelper";
+import {Member, SDS} from '@treecg/types';
+import {Collection, Db, Document, MongoClient} from "mongodb";
+import {AbstractIngestor, IngestorConfig, IRelation} from './AbstractIngestor';
+import {quadsToString} from '../util/Util';
+import {turtleStringToStore} from "@treecg/ldes-snapshot";
+import {Store} from 'n3'
+
 export interface MongoDBIngestorConfig extends IngestorConfig {
     /**
      * The name of the MongoDB Collection for the SDS metadata information.

@@ -1,11 +1,10 @@
-import {extractDate, LDES, Logger, storeToString, turtleStringToStore} from "@treecg/ldes-snapshot";
-import {Member, RDF, RelationType, SDS} from '@treecg/types';
+import {extractDate, LDES, Logger, storeToString} from "@treecg/ldes-snapshot";
+import {Member, RelationType} from '@treecg/types';
 import {Document, WithId} from "mongodb";
 import {DataFactory, Store} from 'n3';
 import {MongoDBIngestor, MongoDBIngestorConfig} from "./MongoDBIngestor";
 import {LDESTSOptions, TSIngestor, Window} from "./TSIngestor";
-import {Fragment, IViewDescription, MongoTSViewDescription, ViewDescription} from "ldes-solid-server";
-import {MongoFragment} from "@treecg/sds-storage-writer-mongo/lib/fragmentHelper";
+import {IViewDescription, MongoTSViewDescription, ViewDescription} from "ldes-solid-server";
 
 const {namedNode, literal} = DataFactory;
 
@@ -168,7 +167,7 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
     }
 
     async addWindowToRoot(window: Window): Promise<void> {
-        const {identifier, start} = window;
+        const {identifier, start, end} = window;
 
         if (!start)
             throw Error("Can not add window " + identifier + " to the root as it has no start date value");
@@ -178,6 +177,15 @@ export class TSMongoDBIngestor extends MongoDBIngestor implements TSIngestor {
             path: this.timestampPath,
             bucket: identifier
         }]);
+
+        if (end) { // TODO: document
+            await this.addRelationsToBucket(this.root, [{
+                type: RelationType.LessThan,
+                value: end.toISOString(),
+                path: this.timestampPath,
+                bucket: identifier
+            }]);
+        }
     }
 
     async append(member: Member): Promise<void> {

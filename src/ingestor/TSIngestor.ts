@@ -1,4 +1,4 @@
-import { Member } from '@treecg/types';
+import {Member} from '@treecg/types';
 
 /**
  * Interface for an LDES Time-Series Window.

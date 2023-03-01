@@ -10,7 +10,7 @@ import {Store} from "n3";
  * Class which makes it possible to create multiple layers for the time-series.
  * (in contrast to the {@link TSMongoDBIngestor}, which only allows for having one layer)
  *
- *
+ * Basically it creates a B+TREE like fragmentation (not a true B+TREE yet -> see README.md
  */
 export class TSMongoDBIngestorBTREE extends TSMongoDBIngestor {
     /**
@@ -80,17 +80,33 @@ export class TSMongoDBIngestorBTREE extends TSMongoDBIngestor {
             await this.deleteBucket(this.root)
             await this.createBucket(this.root)
             await this.createWindow(newWindowLayer)
+
+            // add all relations from root to the new layer
             const rootRelations = rootFragment.relations.map(({type, value, path, bucket}) => {
                 return {type, value, path: path!, bucket} as IRelation
             })
             await this.addRelationsToBucket(newNodeIdentifier, rootRelations)
             await this.addWindowToRoot(newWindowLayer)
 
+            // Create new window with the correct depth.
             const window = await this.createChain(date, this.root, chain.length);
             return window.identifier
         }
         const position = chain.indexOf(nodeForNewWindow)
         if (position === -1) throw Error("Could not find node in chain " + nodeIdentifier);
+
+        for (const window of chain.slice(position + 1)) {
+            // add end relation to window in the chain
+            window.end = date;
+            await this.updateWindow(window);
+            const parentWindow = await this.getParentWindow(window) // could be optimised by just checking the previous index in the normal chain
+            await this.addRelationsToBucket(parentWindow.identifier, [{
+                type: RelationType.LessThan,
+                value: date.toISOString(),
+                path: this.timestampPath,
+                bucket: window.identifier
+            }]);
+        }
         const window = await this.createChain(date, nodeIdentifier, chain.length - (position + 1));
         return window.identifier
     }
@@ -109,23 +125,7 @@ export class TSMongoDBIngestorBTREE extends TSMongoDBIngestor {
         if (window.identifier === this.root) {
             return chain
         }
-        const parentFragment = await this.dbIndexCollection.findOne({
-            streamId: this.streamIdentifier,
-            "relations.type": RelationType.GreaterThanOrEqualTo,
-            "relations.value": new Date(window.start!).toISOString(),
-            "relations.path": this.timestampPath!,
-            "relations.bucket": window.identifier,
-        })
-        if (!parentFragment) {
-            this.logger.info(`Parent not found${{
-                type: RelationType.GreaterThanOrEqualTo,
-                value: new Date(window.start!).toISOString(),
-                path: this.timestampPath!,
-                bucket: window.identifier
-            }}`)
-            throw Error(`No parent found for ${window.identifier}`)
-        }
-        const parentWindow = this.documentToWindow(parentFragment)
+        const parentWindow = await this.getParentWindow(window)
         chain.unshift(...await this.getWindowChain(parentWindow))
         return chain;
     }
@@ -175,6 +175,31 @@ export class TSMongoDBIngestorBTREE extends TSMongoDBIngestor {
             path: this.timestampPath
         }])
         return await this.createChain(date, newNodeIdentifier, chainLength - 1)
+    }
+
+    /**
+     * TODO: docs
+     * @param window
+     * @return {Promise<Window>}
+     */
+    protected async getParentWindow(window: Window): Promise<Window> {
+        const parentFragment = await this.dbIndexCollection.findOne({
+            streamId: this.streamIdentifier,
+            "relations.type": RelationType.GreaterThanOrEqualTo,
+            "relations.value": new Date(window.start!).toISOString(),
+            "relations.path": this.timestampPath!,
+            "relations.bucket": window.identifier,
+        })
+        if (!parentFragment) {
+            this.logger.info(`Parent not found: ${{
+                type: RelationType.GreaterThanOrEqualTo,
+                value: new Date(window.start!).toISOString(),
+                path: this.timestampPath!,
+                bucket: window.identifier
+            }}`)
+            throw Error(`No parent found for ${window.identifier}`)
+        }
+        return this.documentToWindow(parentFragment)
     }
 
     /**

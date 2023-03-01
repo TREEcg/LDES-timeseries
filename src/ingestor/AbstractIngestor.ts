@@ -1,4 +1,4 @@
-import { Member, RelationType } from '@treecg/types'
+import {Member, RelationType} from '@treecg/types'
 
 export interface IRelation {
     type: RelationType
