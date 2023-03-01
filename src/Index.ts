@@ -1,6 +1,7 @@
 export * from "./ingestor/AbstractIngestor"
 export * from "./ingestor/MongoDBIngestor"
 export * from "./util/Util"
+export * from "./util/BTreeUtil"
 export * from "./ingestor/TSIngestor"
 export * from "./ingestor/TSMongoDBIngestor"
 export * from "./ingestor/TSMongoDBIngestorBTREE"

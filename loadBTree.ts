@@ -1,6 +1,7 @@
 import { extractMembers } from "@treecg/ldes-snapshot";
 import { storeFromFile, TSMongoDBIngestor } from "./";
 import {TSMongoDBIngestorBTREE} from "./";
+import {logMaximumMembersForDepth} from "./src/util/BTreeUtil";
 
 async function main() {
     // load some members
@@ -21,7 +22,8 @@ async function main() {
         date: new Date("2022-08-07T08:08:21Z")
     }
     const ingestor = new TSMongoDBIngestorBTREE({ streamIdentifier: streamIdentifier, viewDescriptionIdentifier: viewDescriptionIdentifier });
-
+    ingestor.layerSize = layerSize
+    logMaximumMembersForDepth(pageSize, layerSize)
 
     await ingestor.instantiate(ldesTSConfig);
 

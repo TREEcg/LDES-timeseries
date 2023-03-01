@@ -16,8 +16,9 @@ export class TSMongoDBIngestorBTREE extends TSMongoDBIngestor {
     /**
      * Variable for the number of relations per node in the view of the LDES.
      * Note: currently hardcoded
+     * TODO: persist in meta
      */
-    protected layerSize = 10;
+    public layerSize = 10;
 
     public async append(member: Member) {
         const currentWindow = await this.getMostRecentWindow();
@@ -60,7 +61,7 @@ export class TSMongoDBIngestorBTREE extends TSMongoDBIngestor {
      * @param date - The date to which all members in this new window will be GTE than.
      * @return {string} - The identifier of the newly created window.
      */
-    protected async addWindow(date: Date): Promise<string> { // TODO: make protected
+    protected async addWindow(date: Date): Promise<string> {
         const currentWindow = await this.getMostRecentWindow();
         this.logger.debug('current most recent Window:' + currentWindow.identifier)
         // currently a list of Windows from root node -> ... -> window (top down chain of nodes)
@@ -102,7 +103,7 @@ export class TSMongoDBIngestorBTREE extends TSMongoDBIngestor {
      * @param window
      * @return {Promise<void>}
      */
-    protected async getWindowChain(window: Window): Promise<Window[]> { // TODO: make protected
+    protected async getWindowChain(window: Window): Promise<Window[]> {
         // Note: currently a shortcut to get the latest window chain
         const chain: Window[] = [window]
         if (window.identifier === this.root) {
