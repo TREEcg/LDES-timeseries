@@ -31,22 +31,28 @@ export class TSMongoDBIngestorBTREE extends TSMongoDBIngestor {
         }
         const window = await this.getWindow(windowIdentifierForMember)
         const chain = await this.getWindowChain(window)
-        this.logger.info(`adding member ${member.id.value} to window ${windowIdentifierForMember}, placed in depth: ${chain.length}`)
+        this.logger.debug(`Adding member ${member.id.value} to window ${windowIdentifierForMember}, placed in depth: ${chain.length}`)
         // add member
         await this.storeMember(member);
         await this.addMemberstoBucket(windowIdentifierForMember, [member.id.value]);
     }
 
+    /**
+     * Searches for the most recent window.
+     * Note: The node returned will be a leaf node.
+     * @return {Promise<Window>}
+     */
     async getMostRecentWindow(): Promise<Window> {
-        //TODO: get mostRecentWindow needs to check if there are relations, if there are any, than we have not found our guy
-        const mostRecentBucket = await this.dbIndexCollection.find({streamId: this.streamIdentifier, relations:[]}).sort({"start": -1}).limit(1).next();
-        // const test = await this.dbIndexCollection.find({streamId: this.streamIdentifier, relations:[]}).sort({"start": -1})
-        // console.log(await test.toArray())
+        const mostRecentBucket = await this.dbIndexCollection.find({
+            streamId: this.streamIdentifier,
+            relations: []
+        }).sort({"start": -1}).limit(1).next();
         if (!mostRecentBucket) {
             throw Error("No buckets present");
         }
         return this.documentToWindow(mostRecentBucket);
     }
+
     /**
      * Creates a new window and adds it to the appropriate node.
      * Furthermore, adds the correct relations to this new node.
@@ -54,26 +60,22 @@ export class TSMongoDBIngestorBTREE extends TSMongoDBIngestor {
      * @param date - The date to which all members in this new window will be GTE than.
      * @return {string} - The identifier of the newly created window.
      */
-    public async addWindow(date: Date): Promise<string> { // TODO: make protected
-        const newWindow: Window = {
-            identifier: date.valueOf() + '',
-            start: date
-        };
+    protected async addWindow(date: Date): Promise<string> { // TODO: make protected
         const currentWindow = await this.getMostRecentWindow();
-        // this.logger.info('current most recent Window:' + currentWindow.identifier)
+        this.logger.debug('current most recent Window:' + currentWindow.identifier)
         // currently a list of Windows from root node -> ... -> window (top down chain of nodes)
         const chain = await this.getWindowChain(currentWindow);
         const nodeForNewWindow = await this.findNodeForNewWindow(chain)
         const nodeIdentifier = nodeForNewWindow.identifier
 
-        // TODO: root.relations.length gives the relations double -> filter on unique bucket | create function uniqueNodes
-        if (this.root === nodeIdentifier && (await this.getBucket(this.root)).relations.length + 1 > this.layerSize) {
+        if (this.root === nodeIdentifier && this.uniqueNodes((await this.getBucket(this.root)).relations) + 1 > this.layerSize) {
             const rootFragment = await this.getBucket(this.root);
-            this.logger.info(`A new layer is added as the root points to too many nodes. (layer size: ${this.layerSize} | amount of relations from root: ${rootFragment.relations.length})`)
+            const startDate = this.startDate(rootFragment.relations);
+            this.logger.info(`A new layer is added as the root points to too many nodes: depth of tree: ${chain.length + 1} (layer size: ${this.layerSize} | amount of nodes from root: ${rootFragment.relations.length})`)
             const newNodeIdentifier = uuidv4();
-            const newWindowLayer = {identifier: newNodeIdentifier, start: new Date(0), end: date} // TODO: retrieve start -> oldest date in root Relations.
+            const newWindowLayer = {identifier: newNodeIdentifier, start: startDate, end: date}
 
-            // remove all relations from root: sameAs deleting and creating again (As nothing important is actually stored there (atleast there shouldn't be)
+            // remove all relations from root: sameAs deleting and creating again (As nothing important is actually stored there (at least there shouldn't be)
             await this.deleteBucket(this.root)
             await this.createBucket(this.root)
             await this.createWindow(newWindowLayer)
@@ -88,7 +90,7 @@ export class TSMongoDBIngestorBTREE extends TSMongoDBIngestor {
         }
         const position = chain.indexOf(nodeForNewWindow)
         if (position === -1) throw Error("Could not find node in chain " + nodeIdentifier);
-        const window = await this.createChain(date, nodeIdentifier, chain.length - (position+1));
+        const window = await this.createChain(date, nodeIdentifier, chain.length - (position + 1));
         return window.identifier
     }
 
@@ -100,7 +102,7 @@ export class TSMongoDBIngestorBTREE extends TSMongoDBIngestor {
      * @param window
      * @return {Promise<void>}
      */
-    public async getWindowChain(window: Window): Promise<Window[]> { // TODO: make protected
+    protected async getWindowChain(window: Window): Promise<Window[]> { // TODO: make protected
         // Note: currently a shortcut to get the latest window chain
         const chain: Window[] = [window]
         if (window.identifier === this.root) {
@@ -114,12 +116,12 @@ export class TSMongoDBIngestorBTREE extends TSMongoDBIngestor {
             "relations.bucket": window.identifier,
         })
         if (!parentFragment) {
-            console.log({
+            this.logger.info(`Parent not found${{
                 type: RelationType.GreaterThanOrEqualTo,
                 value: new Date(window.start!).toISOString(),
                 path: this.timestampPath!,
                 bucket: window.identifier
-            })
+            }}`)
             throw Error(`No parent found for ${window.identifier}`)
         }
         const parentWindow = this.documentToWindow(parentFragment)
@@ -134,7 +136,7 @@ export class TSMongoDBIngestorBTREE extends TSMongoDBIngestor {
      * @param chain
      * @return {Promise<void>}
      */
-    public async findNodeForNewWindow(chain: Window[]): Promise<Window> { //TODO: make protected
+    protected async findNodeForNewWindow(chain: Window[]): Promise<Window> {
         const reverseChain = [...chain].reverse()
         // remove top window as this is one that is reserved to only have members
         reverseChain.shift()
@@ -145,7 +147,7 @@ export class TSMongoDBIngestorBTREE extends TSMongoDBIngestor {
                 return window
             }
         }
-        this.logger.info("No windows found: So root is returned.")
+        this.logger.debug("No windows found: So root is returned.")
         return chain[0]; // this will always be the root
     }
 
@@ -158,7 +160,7 @@ export class TSMongoDBIngestorBTREE extends TSMongoDBIngestor {
      * @param chainLength - The length of the chain (i.e. how many nodes are created).
      * @return {Promise<void>}
      */
-    public async createChain(date: Date, identifier: string, chainLength: number): Promise<Window> {
+    protected async createChain(date: Date, identifier: string, chainLength: number): Promise<Window> {
         if (chainLength <= 0) {
             return await this.getWindow(identifier)
         }
@@ -173,15 +175,27 @@ export class TSMongoDBIngestorBTREE extends TSMongoDBIngestor {
         }])
         return await this.createChain(date, newNodeIdentifier, chainLength - 1)
     }
-}
 
-// class Chain<T> implements Iterable<T> {
-//     constructor( private values: T[]) {
-//     }
-//
-//     [Symbol.iterator](): ChainIterator<T> {
-//         return new ChainIterator<T>(this.values);
-//     }
-// }
-//
-// class ChainIterator<T>
+    /**
+     * Calculates in an Array of relations the amount of unique nodes pointed to.
+     * @param relations
+     * @return {number}
+     */
+    private uniqueNodes(relations: { bucket: string }[]): number {
+        const nodeSet = new Set<string>(relations.map(({bucket}) => bucket))
+        return nodeSet.size;
+    }
+
+    /**
+     * Calculates the lowest startDate from an Array of relations.
+     * @param relations
+     * @return {Date}
+     */
+    private startDate(relations: { type: RelationType, value: string }[]): Date {
+        return relations
+            .filter(({type}) => {
+                return type === RelationType.GreaterThanOrEqualTo
+            })
+            .map(({value}) => new Date(value))[0]
+    }
+}

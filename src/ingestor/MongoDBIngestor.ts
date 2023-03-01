@@ -107,6 +107,7 @@ export class MongoDBIngestor extends AbstractIngestor {
     }
 
     public async exit(): Promise<void> {
+        console.log(`${new Date().toISOString()} [${this.constructor.name}] closing connection to the Mongo Database.` )
         await this.mongoConnection?.close();
     }
 
