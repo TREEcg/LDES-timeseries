@@ -17,7 +17,6 @@
     "build": "tsc"
   },
   "files": [
-    "dist",
-    "data/output.ttl"
+    "dist"
   ]
 }

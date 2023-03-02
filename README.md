@@ -125,6 +125,21 @@ Sources:
 * https://www.baeldung.com/cs/b-trees-vs-btrees
 * https://en.wikipedia.org/wiki/B%2B_tree
 * https://en.wikipedia.org/wiki/B-tree
+
+#### Deleting all data from the database
+
+```shell
+# start the mongoDB shell
+mongosh
+
+# go the database
+# when using the default address (mongodb://localhost:27017/ldes), this is `ldes`
+use ldes
+# remove all the data
+# warning! this removes all the data from this database
+db.dropDatabase()
+```
+
 ## Progress
 
 * Adding a member to an LDES in mongoDB works using `@treecg/sds-storage-writer-mongo` (see `attempt-ingesting.ts`)
