@@ -1,6 +1,7 @@
 # LDES Timeseries
 
 [![npm](https://img.shields.io/npm/v/@treecg/ldes-timeseries)](https://www.npmjs.com/package/@treecg/ldes-timeseries)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7702088.svg)](https://doi.org/10.5281/zenodo.7702088)
 
 Add members to an LDES Time Series in different kinds of databases.
 
