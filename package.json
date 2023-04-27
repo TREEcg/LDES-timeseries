@@ -1,20 +1,22 @@
 {
   "name": "@treecg/ldes-timeseries",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "main": "dist/Index.js",
   "types": "dist/Index.d.ts",
   "dependencies": {
     "@treecg/ldes-snapshot": "^0.1.1",
     "@treecg/sds-storage-writer-mongo": "^0.0.3",
+    "ldes-solid-server": "^0.0.8",
     "mongodb": "^5.0.1",
     "ts-node": "^10.9.1",
-    "ldes-solid-server": "^0.0.6"
+    "typescript": "^5.0.4"
   },
   "devDependencies": {
     "@types/node": "^18.11.19"
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "release": "npm run build && npm publish"
   },
   "files": [
     "dist"
